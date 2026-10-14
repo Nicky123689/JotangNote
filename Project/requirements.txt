@@ -1,0 +1,8 @@
+# 启蒙篇依赖（后续入门篇/进阶篇会继续追加）
+fastapi>=0.115
+uvicorn[standard]>=0.30
+
+# 入门篇需要时再打开：
+# pymysql>=1.1
+# redis>=5.0
+# pika>=1.3
