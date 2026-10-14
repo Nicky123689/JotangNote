@@ -124,6 +124,30 @@ SCHEMA = [
         processed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='已处理的 MQ 消息（幂等性保证）'
     """,
+    # AI 会话表（进阶篇：会话管理 + 持久化）
+    """
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+        id BIGINT PRIMARY KEY AUTO_INCREMENT,
+        user_id BIGINT NOT NULL,
+        title VARCHAR(60) NOT NULL DEFAULT '新的对话',
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_chat_sessions_user (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI 会话'
+    """,
+    # AI 消息表：原样保存 assistant 的 tool_calls 和 tool 结果，保证上下文可回放
+    """
+    CREATE TABLE IF NOT EXISTS chat_messages (
+        id BIGINT PRIMARY KEY AUTO_INCREMENT,
+        session_id BIGINT NOT NULL,
+        role VARCHAR(16) NOT NULL COMMENT 'system/user/assistant/tool',
+        content MEDIUMTEXT NULL,
+        raw MEDIUMTEXT NULL COMMENT '带 tool_calls 的完整消息（JSON）',
+        tool_call_id VARCHAR(64) NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_chat_messages_session (session_id, id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI 会话消息'
+    """,
 ]
 
 

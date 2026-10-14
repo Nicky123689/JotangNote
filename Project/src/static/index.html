@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JotangNote · 焦糖笔记</title>
+<style>
+  :root {
+    --bg: #f7f4ef; --card: #fff; --line: #e6e0d6; --text: #2f2a26;
+    --muted: #8b8177; --primary: #c8873f; --primary-dark: #a86e2d; --ok: #2e7d32; --err: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  header { background: var(--card); border-bottom: 1px solid var(--line);
+           padding: 14px 22px; display: flex; align-items: center; gap: 14px; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .who { margin-left: auto; color: var(--muted); font-size: 13px; }
+  main { max-width: 1080px; margin: 22px auto; padding: 0 18px;
+         display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 16px 18px; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--primary-dark); }
+  input, textarea, button { font: inherit; }
+  input, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line);
+                    border-radius: 8px; background: #fffdfa; }
+  textarea { min-height: 90px; resize: vertical; }
+  button { background: var(--primary); color: #fff; border: 0; border-radius: 8px;
+           padding: 8px 14px; cursor: pointer; }
+  button.ghost { background: #fff; color: var(--primary-dark); border: 1px solid var(--line); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .row > * { margin: 0; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .list { list-style: none; margin: 0; padding: 0; }
+  .list li { border-top: 1px dashed var(--line); padding: 9px 0; display: flex;
+             align-items: center; gap: 8px; }
+  .list li:first-child { border-top: 0; }
+  .list .title { flex: 1; cursor: pointer; }
+  .list .title:hover { color: var(--primary-dark); }
+  .tag { font-size: 12px; color: var(--muted); }
+  #chat { height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px;
+          padding: 10px; background: #fffdfa; margin-bottom: 10px; }
+  .msg { margin: 8px 0; display: flex; }
+  .msg .bubble { max-width: 82%; padding: 8px 11px; border-radius: 10px; white-space: pre-wrap;
+                 word-break: break-word; }
+  .msg.user { justify-content: flex-end; }
+  .msg.user .bubble { background: #fdebd3; }
+  .msg.assistant .bubble { background: #f1efe9; }
+  .msg.tool .bubble { background: #eef6ee; font-size: 12px; color: #4a5d4a; font-family: monospace; }
+  #toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+           background: #333; color: #fff; padding: 8px 14px; border-radius: 8px;
+           opacity: 0; transition: opacity .25s; pointer-events: none; font-size: 13px; }
+  #toast.show { opacity: .93; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🍬 JotangNote · 焦糖笔记</h1>
+  <span class="muted" id="stage">招新题 · 进阶篇</span>
+  <span class="who" id="who">未登录</span>
+</header>
+
+<main>
+  <!-- 左侧：账号 + 笔记 -->
+  <section>
+    <h2>账号</h2>
+    <div id="auth-box">
+      <div class="row"><input id="student_id" placeholder="学号" value="2025090914010" /></div>
+      <div class="row"><input id="name" placeholder="昵称（注册用）" value="唐朝" /></div>
+      <div class="row"><input id="password" type="password" placeholder="密码" value="jotang123" /></div>
+      <div class="row">
+        <button onclick="doLogin()">登录</button>
+        <button class="ghost" onclick="doRegister()">注册</button>
+        <button class="ghost" onclick="doLogout()">退出</button>
+      </div>
+    </div>
+
+    <h2 style="margin-top:18px">我的笔记</h2>
+    <div class="row"><input id="note_title" placeholder="标题" /></div>
+    <div class="row"><textarea id="note_content" placeholder="正文……"></textarea></div>
+    <div class="row">
+      <button onclick="createNote()">新建笔记（走 MQ）</button>
+      <button class="ghost" onclick="loadNotes()">刷新</button>
+    </div>
+    <ul class="list" id="notes"></ul>
+    <div id="note_detail" class="muted" style="margin-top:10px"></div>
+  </section>
+
+  <!-- 右侧：AI 助手 -->
+  <section>
+    <h2>AI 助手（可以自己查你的笔记）</h2>
+    <div id="chat"></div>
+    <div class="row">
+      <input id="chat_input" placeholder="例如：帮我总结第 1 号笔记" onkeydown="if(event.key==='Enter')sendChat()" />
+      <button onclick="sendChat()" id="send_btn">发送</button>
+    </div>
+    <div class="row">
+      <button class="ghost" onclick="newSession()">新对话</button>
+      <span class="muted" id="session_info">会话：-</span>
+    </div>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const API = "";
+let token = localStorage.getItem("jotang_token") || "";
+let sessionId = localStorage.getItem("jotang_session") || null;
+
+function toast(text, err = false) {
+  const t = document.getElementById("toast");
+  t.textContent = text;
+  t.style.background = err ? "#c0392b" : "#333";
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+async function api(method, path, body) {
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = "Bearer " + token;
+  const resp = await fetch(API + path, {
+    method, headers, body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : "HTTP " + resp.status);
+  return data;
+}
+
+function renderWho(me) {
+  document.getElementById("who").textContent = me ? `已登录：${me.name}（${me.student_id}）` : "未登录";
+}
+
+async function doLogin() {
+  try {
+    const d = await api("POST", "/api/auth/login", {
+      student_id: document.getElementById("student_id").value.trim(),
+      password: document.getElementById("password").value,
+    });
+    token = d.data.token;
+    localStorage.setItem("jotang_token", token);
+    toast("登录成功");
+    await refreshMe(); await loadNotes();
+  } catch (e) { toast("登录失败：" + e.message, true); }
+}
+
+async function doRegister() {
+  try {
+    await api("POST", "/api/auth/register", {
+      student_id: document.getElementById("student_id").value.trim(),
+      name: document.getElementById("name").value.trim(),
+      password: document.getElementById("password").value,
+    });
+    toast("注册成功，正在登录…");
+    await doLogin();
+  } catch (e) { toast("注册失败：" + e.message, true); }
+}
+
+function doLogout() {
+  token = ""; localStorage.removeItem("jotang_token"); renderWho(null);
+  document.getElementById("notes").innerHTML = ""; toast("已退出登录");
+}
+
+async function refreshMe() {
+  if (!token) { renderWho(null); return; }
+  try { const d = await api("GET", "/api/auth/me"); renderWho(d.data); }
+  catch { token = ""; localStorage.removeItem("jotang_token"); renderWho(null); }
+}
+
+async function loadNotes() {
+  if (!token) return;
+  const d = await api("GET", "/api/notes");
+  const ul = document.getElementById("notes");
+  ul.innerHTML = d.data.length ? "" : "<li class='muted'>还没有笔记</li>";
+  d.data.forEach(n => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="title">#${n.id} ${n.title}</span>
+                    <span class="tag">${(n.updated_at || "").toString().slice(0, 16)}</span>`;
+    li.querySelector(".title").onclick = () => showNote(n.id);
+    const del = document.createElement("button");
+    del.className = "ghost"; del.textContent = "删除";
+    del.onclick = async () => {
+      await api("DELETE", "/api/notes/" + n.id); toast("删除已进入队列"); setTimeout(loadNotes, 900);
+    };
+    li.appendChild(del);
+    ul.appendChild(li);
+  });
+}
+
+async function createNote() {
+  if (!token) return toast("请先登录", true);
+  const title = document.getElementById("note_title").value.trim();
+  const content = document.getElementById("note_content").value.trim();
+  if (!title || !content) return toast("标题和正文都要填", true);
+  const d = await api("POST", "/api/notes", { title, content });
+  toast("已提交（op_id=" + d.data.op_id + "），稍后生效");
+  document.getElementById("note_title").value = "";
+  document.getElementById("note_content").value = "";
+  setTimeout(loadNotes, 1000);
+}
+
+async function showNote(id) {
+  const d = await api("GET", "/api/notes/" + id);
+  const n = d.data;
+  document.getElementById("note_detail").textContent =
+    `#${n.id} 【${n.title}】（数据来自 ${n._source}）\n${n.content}`;
+}
+
+function addMsg(role, text) {
+  const box = document.getElementById("chat");
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = text;
+  div.appendChild(bubble); box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function newSession() {
+  sessionId = null; localStorage.removeItem("jotang_session");
+  document.getElementById("chat").innerHTML = "";
+  document.getElementById("session_info").textContent = "会话：新对话";
+}
+
+async function sendChat() {
+  if (!token) return toast("请先登录", true);
+  const input = document.getElementById("chat_input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  addMsg("user", text);
+  const btn = document.getElementById("send_btn");
+  btn.disabled = true; btn.textContent = "思考中…";
+  try {
+    const d = await api("POST", "/api/chat", { message: text, session_id: sessionId });
+    sessionId = d.data.session_id;
+    localStorage.setItem("jotang_session", sessionId);
+    document.getElementById("session_info").textContent = "会话：" + sessionId;
+    addMsg("assistant", d.data.reply);
+  } catch (e) {
+    addMsg("assistant", "出错了：" + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "发送";
+  }
+}
+
+(async function init() {
+  await refreshMe();
+  if (token) await loadNotes();
+})();
+</script>
+</body>
+</html>

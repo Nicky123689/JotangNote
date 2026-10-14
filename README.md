@@ -17,22 +17,30 @@ JotangNote/
 └── Project/
     ├── requirements.txt
     ├── src/                      # 源码
-    │   ├── main.py               # FastAPI 入口（认证 + 笔记接口）
+    │   ├── main.py               # FastAPI 入口（认证 + 笔记接口 + AI 对话）
     │   ├── config.py             # 配置（全部从环境变量读）
     │   ├── db.py                 # MySQL 连接池 + 建表
     │   ├── cache.py              # Redis 缓存与会话
     │   ├── mq.py                 # RabbitMQ 生产者
     │   ├── worker.py             # RabbitMQ 消费者（真正执行增删改）
     │   ├── security.py           # 密码哈希与 token
+    │   ├── ai.py                 # AI 客户端（OpenAI 兼容接口，支持 tools）
+    │   ├── sessions.py           # AI 会话与消息持久化
+    │   ├── tools.py              # 给 AI 用的工具（query_note）+ 工具执行时的鉴权
+    │   ├── static/index.html     # 前端页面（单文件，Vibe Coding 产出）
     │   └── hello_terminal.py     # 启蒙篇：终端 Hello World
     ├── tests/                    # 联调脚本（会打印完整流程，可当测试证据）
     │   ├── flow_test.py          # 注册→登录→增删改查 全流程
     │   ├── cache_test.py         # 缓存命中 / 穿透 / 击穿
-    │   └── idempotent_test.py    # MQ 幂等性
+    │   ├── idempotent_test.py    # MQ 幂等性
+    │   └── chat_test.py          # AI 对话、会话管理、Tool Use
     └── docs/                     # 项目说明文档（含运行截图）
         ├── 入门篇-01-MySQL笔记与用户.md
         ├── 入门篇-02-Redis缓存.md
         ├── 入门篇-03-RabbitMQ异步.md
+        ├── 进阶篇-01-接入AI与会话管理.md
+        ├── 进阶篇-02-ToolUse.md
+        ├── 进阶篇-03-前端页面.md
         └── img/
 ```
 
@@ -42,7 +50,7 @@ JotangNote/
 | --- | --- | --- |
 | 启蒙篇 | 开发环境（两个 Hello World）、常用技术栈笔记 | ✅ 完成 |
 | 入门篇 | MySQL 增删改查与用户登录、Redis 缓存（含防穿透/击穿）、RabbitMQ 异步（含顺序性/幂等性） | ✅ 完成 |
-| 进阶篇 | 接入 AI API、会话管理、Tool Use | 未开始 |
+| 进阶篇 | 接入 AI API（`/api/chat`）、会话管理（持久化）、Tool Use（AI 自己查笔记）、前端页面 | ✅ 完成 |
 
 ## 技术栈与依赖的服务
 
@@ -93,6 +101,7 @@ python Project/tests/idempotent_test.py
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/hello` | 启蒙篇示例接口 |
+| GET | `/ui` | 前端页面（登录、笔记列表、AI 对话） |
 | POST | `/api/auth/register` | 注册（密码加盐哈希后入库） |
 | POST | `/api/auth/login` | 登录（返回 token，存 Redis） |
 | GET | `/api/auth/me` | 当前登录用户 |
@@ -102,6 +111,20 @@ python Project/tests/idempotent_test.py
 | GET | `/api/notes/{id}` | 查一篇笔记（Redis 缓存旁路 + 防穿透/击穿） |
 | PUT | `/api/notes/{id}` | 修改笔记 → 投 MQ，返回 202 |
 | DELETE | `/api/notes/{id}` | 删除笔记（软删）→ 投 MQ，返回 202 |
+| POST | `/api/chat` | 与 AI 对话（带 `session_id` 续同一会话；AI 可自行调用 query_note 工具） |
+| GET | `/api/chat/sessions` | 我的历史会话 |
+| GET | `/api/chat/sessions/{id}` | 某个会话的完整消息记录 |
+
+## 需要配置的环境变量
+
+见 `Project/env.example`（复制成 `.env` 或直接 export）。**至少要设这两个**：
+
+```bash
+export JOTANG_MYSQL_PASSWORD='你的数据库密码'
+export JOTANG_AI_API_KEY='你的 AI API key'   # 默认走 DeepSeek，可换 MiMo（改 JOTANG_AI_BASE / JOTANG_AI_MODEL）
+```
+
+> 真实密钥不要提交进仓库——`.gitignore` 里已经忽略了 `.env`。
 
 > 🤖 AI 使用说明：本仓库的代码与笔记由本人使用 Hermes Agent（AI Agent）协助完成。
 > 招新题允许使用 AI，所有接口、截图与测试结果均为本地实际运行所得，
